@@ -1,7 +1,10 @@
-build
+build/
+lib/
+release/
+*.nro
 *.elf
-*.npdm
-*.nso
-*.nsp
-*.zip
-out/
+*.nacp
+*.la
+*.o
+*.map
+.vscode/settings.json

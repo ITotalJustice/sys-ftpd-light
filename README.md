@@ -1,71 +1,72 @@
-# sys-ftpd
+# libftpd
 
-#### Previously sys-ftpd-light
+libftpd is sys-ftpd made into a easy to use library with a few changes along the way.
 
-This is a lightweight FTP server that runs in the background on your Nintendo Switch.
-
- - It's a lightweight version of mtheall's [ftpd](https://github.com/mtheall/ftpd) app run as a background service (sysmodule).
- - Originally forked from jakibaki's [sys-ftpd](https://github.com/jakibaki/sys-ftpd) in an attempt to improve peformance and stability.  
-
-Since it's lightweight, it occupies less memory on your console at the cost of transferring files a bit slower. If you want to transfer large files, I would suggest you install mtheall's [ftpd](https://github.com/mtheall/ftpd) separately and run it whenever you need to make a large file transfer.
-
-## How to use
-1. Go to the [latest release](https://github.com/cathery/sys-ftpd/releases/latest) and download the sys-ftpd zip folder. (not the source code)
-2. Extract the contents of the folder to the root of your Nintendo Switch's SD card. (it should overlap with your existing atmosphere and config folders)
-3. Go to config/sys-ftpd/config.ini and set your username and password for the FTP server. (otherwise it won't let you connect)
-   - Alternatively you can enable anonymous mode, which will let anyone in the network connect to your FTP server without credentials. (unsafe)
-4. Boot/reboot your Nintendo Switch into CFW as usual.
-5. Once your console is connected to a network, you can connect to your server with any FTP client (you can find them online) from any computer within the same network.
-   - The IP address of your Nintendo Switch can be found in your console's System Settings -> Internet -> Connection Status -> IP address. (it usually looks like 192.168.X.X)
-   - The port can be found and modified in the config.ini mentioned above. (it's 5000 by default)
-   - The resulting address should look something like `192.168.X.X:5000`, where your username and password are your `user` and `password` from config.ini respectively.
-6. You should now be able to enjoy accessing your Nintendo Switch files remotely.
-
-## Other
-
-Hotkeys: To help with security while there is are no login credentials, debugging, or otherwise, you can pause/resume running the server using the PLUS+MINUS+X button combination.
-
-Sysmodule program ID: **420000000000000E**
+the goal of this was to convert fs calls to native and to make ftp easier to add into a project.
 
 ---
 
-Config Example (Located on your sd in `sdmc:/config/sys-ftpd/config.ini`):
+## how to use
 
+Add the `source` and `include` folders to your makefile. This may look something like:
+```mk
+SOURCES     += src/libftpd/source
+INCLUDES    += src/libftpd/include
 ```
-[User]
-user:=jeremy
 
-# user:= -> Login username
+Here is an example for your c/c++ project:
 
-[Password]
-password:=ilovecars
+```c
+#include <switch.h>
+#include "ftpd.h"
 
-# password:= -> Login password
+int main(int argc, char** argv) {
+    appletLockExit(); // block exit until everything is cleaned up
+    ftpdInitialize(NULL, NULL, 21, FtpdMount_SD, NULL); // init libftpd without user/pass, port 21, mounts sd, no callback (creates thread)
 
-[Port]
-port:=5000
+    PadState pad;
+    padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+    padInitializeDefault(&pad);
 
-# port:=5000 -> opens the server on port 5000 (using the console's IP address).
+    // loop until + button is pressed
+    while (appletMainLoop()) {
+        padUpdate(&pad);
 
-[Anonymous]
-anonymous:=0
+        const u64 kDown = padGetButtonsDown(&pad);
+        if (kDown & HidNpadButton_Plus)
+            break; // break in order to return to hbmenu
 
-# anonymous:=1 -> Anyone can connect to the server. (dangerous!)
-# anonymous:=0 -> Only allows logging into the ftpd server with the correct username and password. user and password (in fields above) must be set.
+        svcSleepThread(1000000);
+    }
 
-[Pause]
-disabled:=0
-keycombo:=PLUS+MINUS+X
-
-# disabled:=1 -> Disables allowing sys-ftpd to be paused by pressing the key combination.
-# disabled:=0 -> Allows sys-ftpd to be paused by pressing the key combination.
-# keycombo:=  -> The key combination used to pause sys-ftpd. Each key is separated by either a plus '+' or a space ' '. Up to 8 keys are allowed.
-# The list of valid keys is as follows:
-# A, B, X, Y, LS, RS, L, R, ZL, ZR, PLUS, MINUS, DLEFT, DUP, DRIGHT, DDOWN
-
-[LED]
-led:=1
-
-# led:=1 -> LED flashes on connect (default)
-# led:=0 -> LED does not flash on connect
+    ftpdExit(); // signals libftpd to exit, closes thread
+    appletUnlockExit(); // unblocks exit to cleanly exit
+}
 ```
+
+---
+
+## changes
+
+some changes to sys-ftpd were made:
+
+- make it easier to add to into a project.
+- replaces all stdio fs with native calls, this is not only faster but lowers overall mem usage.
+- option to mount sd card or image directory.
+- add event callback.
+
+---
+
+## Todo
+
+in no particular order:
+
+- add sys-ftpd example that is parity with upstream.
+- benchmark native fs changes to upstream.
+- compare mem usage to upstream.
+
+---
+
+## Credits
+
+[sys-ftpd](https://github.com/cathery/sys-ftpd).

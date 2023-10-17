@@ -1,22 +1,18 @@
 {
     "configurations": [
         {
-            "name": "AArch64 libnx",
+            "name": "switch",
             "includePath": [
-                "${workspaceFolder}/build",
-                "${DEVKITPRO}/devkitA64/lib/gcc/aarch64-none-elf/10.1.0/include",
-                "${DEVKITPRO}/devkitA64/aarch64-none-elf/include",
-                "${DEVKITPRO}/portlibs/switch/include/**",
-                "${DEVKITPRO}/libnx/include"
+                "${default}",
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/include",
+                "${DEVKITPRO}/libnx/include/",
+                "${DEVKITPRO}/portlibs/switch/include/"
             ],
-            "defines": [
-                "SWITCH",
-                "__SWITCH__"
-            ],
-            "compilerPath": "${DEVKITPRO}/devkitA64/bin/aarch64-none-elf-g++",
-            "cStandard": "gnu18",
-            "cppStandard": "gnu++20",
-            "intelliSenseMode": "gcc-x64"
+            "defines": ["__SWITCH__"],
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++23",
+            "compilerPath": "${DEVKITPRO}/devkitA64/bin/aarch64-none-elf-gcc"
         }
     ],
     "version": 4

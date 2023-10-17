@@ -37,33 +37,41 @@ include $(DEVKITPRO)/libnx/switch_rules
 #   of a homebrew executable (.nro). This is intended to be used for sysmodules.
 #   NACP building is skipped as well.
 #---------------------------------------------------------------------------------
-TARGET		:=	libftpd
+APP_TITLE	:= libftpd-example
+APP_AUTHOR	:= TotalJustice
+APP_VERSION	:= 1.0.0
+# ICON		:= assets/icon.jpg
+
+TARGET		:=	libftpd-example
 BUILD		:=	build
-SOURCES		:=	source
-INCLUDES	:=	include
+SOURCES     :=	source
+INCLUDES    :=	include
+DATA		:=	data
+# ROMFS		:=	assets/romfs
+# OUT_SHADERS	:=	shaders
+
+# libftpd
+LIBFTPD_DIR := ..
+INCLUDES += $(LIBFTPD_DIR)/include
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
-			$(ARCH) $(DEFINES)
-
-CFLAGS	+=	$(INCLUDE) -D__SWITCH__
-
+CFLAGS	:=	-O2 $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__ -Wall
 CXXFLAGS	:= $(CFLAGS) -std=gnu++23 -fno-exceptions -fno-rtti
 
-ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+ASFLAGS	:=	$(ARCH)
+LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lnx
+LIBS	:= -lftpd -lnx
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(PORTLIBS) $(LIBNX)
+LIBDIRS	:= $(PORTLIBS) $(LIBNX) $(TOPDIR)/$(LIBFTPD_DIR)/
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -76,9 +84,17 @@ export OUTPUT	:=	$(CURDIR)/$(TARGET)
 export TOPDIR	:=	$(CURDIR)
 
 export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
-			$(foreach dir,$(DATA),$(CURDIR)/$(dir))
+					$(foreach dir,$(DATA),$(CURDIR)/$(dir))
 
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
+
+SUBFOLDERS := $(NANOVG_DIR) $(LIBFTPD_DIR)
+TOPTARGETS := all clean
+
+$(TOPTARGETS): $(SUBFOLDERS)
+
+$(SUBFOLDERS):
+	$(MAKE) -C $@ $(MAKECMDGOALS)
 
 CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
 CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
@@ -102,53 +118,122 @@ endif
 
 export OFILES_BIN	:=	$(addsuffix .o,$(BINFILES))
 export OFILES_SRC	:=	$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
-export OFILES 	:=	$(OFILES_BIN) $(OFILES_SRC)
+export OFILES 		:=	$(OFILES_BIN) $(OFILES_SRC)
 export HFILES_BIN	:=	$(addsuffix .h,$(subst .,_,$(BINFILES)))
 
-export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
-			$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
-			-I$(CURDIR)/$(BUILD)
+export INCLUDE		:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
+						$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+						-I$(CURDIR)/$(BUILD)
 
-.PHONY: all clean
+export LIBPATHS		:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+
+ifneq ($(strip $(ROMFS)),)
+	ROMFS_TARGETS :=
+	ROMFS_FOLDERS :=
+	ifneq ($(strip $(OUT_SHADERS)),)
+		ROMFS_SHADERS := $(ROMFS)/$(OUT_SHADERS)
+		ROMFS_TARGETS += $(patsubst %.glsl, $(ROMFS_SHADERS)/%.dksh, $(GLSLFILES))
+		ROMFS_FOLDERS += $(ROMFS_SHADERS)
+	endif
+
+	export ROMFS_DEPS := $(foreach file,$(ROMFS_TARGETS),$(CURDIR)/$(file))
+endif
+
+ifeq ($(strip $(ICON)),)
+	icons := $(wildcard *.jpg)
+	ifneq (,$(findstring $(TARGET).jpg,$(icons)))
+		export APP_ICON := $(TOPDIR)/$(TARGET).jpg
+	else
+		ifneq (,$(findstring icon.jpg,$(icons)))
+			export APP_ICON := $(TOPDIR)/icon.jpg
+		endif
+	endif
+else
+	export APP_ICON := $(TOPDIR)/$(ICON)
+endif
+
+ifeq ($(strip $(NO_ICON)),)
+	export NROFLAGS += --icon=$(APP_ICON)
+endif
+
+ifeq ($(strip $(NO_NACP)),)
+	export NROFLAGS += --nacp=$(CURDIR)/$(TARGET).nacp
+endif
+
+ifneq ($(APP_TITLEID),)
+	export NACPFLAGS += --titleid=$(APP_TITLEID)
+endif
+
+ifneq ($(ROMFS),)
+	export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
+endif
+
+.PHONY: $(BUILD) $(TOPTARGETS) $(SUBFOLDERS) all clean
 
 #---------------------------------------------------------------------------------
-all: lib/$(TARGET).a
+all: $(ROMFS_TARGETS) | $(BUILD)
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
-lib:
-	@[ -d $@ ] || mkdir -p $@
+$(BUILD):
+	@mkdir -p $@
 
-release:
-	@[ -d $@ ] || mkdir -p $@
+ifneq ($(strip $(ROMFS_TARGETS)),)
 
-lib/$(TARGET).a : lib release $(SOURCES) $(INCLUDES)
-	@$(MAKE) BUILD=release OUTPUT=$(CURDIR)/$@ \
-	BUILD_CFLAGS="-DNDEBUG=1 -O2" \
-	DEPSDIR=$(CURDIR)/release \
-	--no-print-directory -C release \
-	-f $(CURDIR)/Makefile
+$(ROMFS_TARGETS): | $(ROMFS_FOLDERS)
 
-dist-bin: all
-	@tar --exclude=*~ -cjf $(TARGET).tar.bz2 include lib
+$(ROMFS_FOLDERS):
+	@mkdir -p $@
 
-dist-src:
-	@tar --exclude=*~ -cjf $(TARGET)-src.tar.bz2 include source Makefile
+$(ROMFS_SHADERS)/%_vsh.dksh: %_vsh.glsl
+	@echo {vert} $(notdir $<)
+	@uam -s vert -o $@ $<
 
-dist: dist-src dist-bin
+$(ROMFS_SHADERS)/%_tcsh.dksh: %_tcsh.glsl
+	@echo {tess_ctrl} $(notdir $<)
+	@uam -s tess_ctrl -o $@ $<
+
+$(ROMFS_SHADERS)/%_tesh.dksh: %_tesh.glsl
+	@echo {tess_eval} $(notdir $<)
+	@uam -s tess_eval -o $@ $<
+
+$(ROMFS_SHADERS)/%_gsh.dksh: %_gsh.glsl
+	@echo {geom} $(notdir $<)
+	@uam -s geom -o $@ $<
+
+$(ROMFS_SHADERS)/%_fsh.dksh: %_fsh.glsl
+	@echo {frag} $(notdir $<)
+	@uam -s frag -o $@ $<
+
+$(ROMFS_SHADERS)/%.dksh: %.glsl
+	@echo {comp} $(notdir $<)
+	@uam -s comp -o $@ $<
+
+endif
+
 #---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -fr release lib *.bz2
+	@rm -fr $(BUILD) $(TARGET).nro $(TARGET).nacp $(TARGET).elf
+
 #---------------------------------------------------------------------------------
 else
+.PHONY:	all
 
 DEPENDS	:=	$(OFILES:.o=.d)
 
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
-$(OUTPUT)	:	$(OFILES)
 
-$(OFILES)	:	$(GCH_FILES)
+all	:	$(OUTPUT).nro
+
+ifeq ($(strip $(NO_NACP)),)
+$(OUTPUT).nro	:	$(OUTPUT).elf $(OUTPUT).nacp $(ROMFS_DEPS)
+else
+$(OUTPUT).nro	:	$(OUTPUT).elf $(ROMFS_DEPS)
+endif
+
+$(OUTPUT).elf	:	$(OFILES)
 
 $(OFILES_SRC)	: $(HFILES_BIN)
 
