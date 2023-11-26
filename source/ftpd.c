@@ -609,32 +609,19 @@ ftp_session_open_file_write(ftp_session_t* session,
                             bool append)
 {
     Result rc;
-    u32 mode = FsOpenMode_Write;
+    u32 mode = FsOpenMode_Write | FsOpenMode_Append;
     char safe_buf[FS_MAX_PATH];
     strcpy(safe_buf, session->buffer);
 
-    if (append)
+    if (!append && session->filepos != 0)
     {
-        mode = FsOpenMode_Write | FsOpenMode_Append;
-    }
-    else if (session->filepos != 0)
-    {
-        mode = FsOpenMode_Read | FsOpenMode_Write;
-    }
-
-    if (!append)
-    {
-        // Opening an exisiting file for writing can apparently result in corruption D:
-        // TODO: verify the above statement
+        mode |= FsOpenMode_Read;
     }
 
     rc = fsFsCreateFile(&g_fs, safe_buf, 0, 0);
     if (R_FAILED(rc) && rc != 0x402)
     {
-        if (rc != 0x402)
-        {
-            return -1;
-        }
+        return -1;
     }
     else
     {
@@ -664,7 +651,6 @@ ftp_session_open_file_write(ftp_session_t* session,
         {
             session->filepos = 0;
         }
-
     }
 
     return 0;
@@ -684,12 +670,6 @@ ftp_session_write_file(ftp_session_t* session)
     const ssize_t bytes_written = session->buffersize - session->bufferpos;
     assert(bytes_written >= 0 && "uh oh");
     if (bytes_written < 0)
-    {
-        return -1;
-    }
-
-    /* increase file size (check if we can know size ahead of write) */
-    if (R_FAILED(rc = fsFileSetSize(&session->native_file, session->filepos + bytes_written)))
     {
         return -1;
     }

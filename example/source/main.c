@@ -18,9 +18,22 @@ static const u16 g_port = 5000;
 void userAppInit(void) {
     Result rc;
 
+    // https://github.com/mtheall/ftpd/blob/e27898f0c3101522311f330e82a324861e0e3f7e/source/switch/init.c#L31
+    const SocketInitConfig socket_config = {
+        .tcp_tx_buf_size = 1024 * 1024 * 1,
+        .tcp_rx_buf_size = 1024 * 1024 * 1,
+        .tcp_tx_buf_max_size = 1024 * 1024 * 4,
+        .tcp_rx_buf_max_size = 1024 * 1024 * 4,
+        .udp_tx_buf_size = 0x2400, // same as default
+        .udp_rx_buf_size = 0xA500, // same as default
+        .sb_efficiency = 8,
+        .num_bsd_sessions = 12,
+        .bsd_service_type = BsdServiceType_Auto,
+    };
+
     if (R_FAILED(rc = appletLockExit())) // block exit until everything is cleaned up
         diagAbortWithResult(rc);
-    if (R_FAILED(rc = socketInitializeDefault()))
+    if (R_FAILED(rc = socketInitialize(&socket_config)))
         diagAbortWithResult(rc);
     if (R_FAILED(rc = nifmInitialize(NifmServiceType_User)))
         diagAbortWithResult(rc);
